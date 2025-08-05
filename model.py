@@ -1,10 +1,11 @@
 import os
-import sys
 import io
+import sys
 import glob
-import fitz 
+import fitz
 import getpass
 import warnings
+import pytesseract
 from PIL import Image
 from typing import List, Union
 from dotenv import load_dotenv
@@ -22,8 +23,7 @@ from pdf2image import convert_from_path
 
 warnings.filterwarnings("ignore")
 
-sys.path.insert(1, './src')
-# print(sys.path.insert(1, '../src/'))
+
 
 load_dotenv()
 
@@ -51,15 +51,10 @@ def load_model():
   )
   return model, embeddings
 
-# =====================================================================
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 def extract_images_from_pdf(pdf_path: str, image_output_dir: str):
-    """
-    Extracts embedded images and page previews from a PDF.
-    Saves them in the image_output_dir and returns a list of paths.
-    """
-
-    # Embedded images (if any)
     os.makedirs(image_output_dir, exist_ok=True)
     image_paths = []
     doc = fitz.open(pdf_path)
@@ -69,7 +64,7 @@ def extract_images_from_pdf(pdf_path: str, image_output_dir: str):
     for page_index in range(len(doc)):
         page_text = doc[page_index].get_text().lower()
         if not any(word in page_text for word in keywords):
-            continue  # skip these pages
+            continue  # skip irrelevant pages
 
         for img_index, img in enumerate(doc.get_page_images(page_index)):
             xref = img[0]
@@ -124,32 +119,32 @@ def load_documents(source_dir: str, extract_images: bool = True, image_output_di
 
     return documents, images
 
-# =====================================================================
+
+
+def ocr_image(image_path):
+    try:
+        image = Image.open(image_path)
+        text = pytesseract.image_to_string(image)
+        return text.strip()
+    except Exception as e:
+        return f"OCR failed for {image_path}: {str(e)}"
 
 
 
-# def load_documents(source_dir: str):
-#     """
-#     Load documents from multiple sources
-#     """
-#     documents = []
+def images_to_documents(image_paths: List[str]) -> List[Document]:
+    image_docs = []
+    for path in image_paths:
+        ocr_text = ocr_image(path)
+        if ocr_text:
+            image_docs.append(Document(
+                page_content=ocr_text,
+                metadata={"source": path}
+            ))
+    return image_docs
 
-#     file_types = {
-#       "*.pdf": PyPDFLoader,
-#       "*.csv": CSVLoader
-#     }
+# ++++++++++++++++++++++++++++++++++++++++++++++
 
-#     if os.path.isfile(source_dir):
-#         ext = os.path.splitext(source_dir)[1].lower()
-#         if ext == ".pdf":
-#             documents.extend(PyPDFLoader(source_dir).load())
-#         elif ext == ".csv":
-#             documents.extend(CSVLoader(source_dir).load())
-#     else:
-#         for pattern, loader in file_types.items():
-#             for file_path in glob.glob(os.path.join(source_dir, pattern)):
-#                 documents.extend(loader(file_path).load())
-#     return documents
+
 
 
 def create_vector_store(docs: List[Document], embeddings, chunk_size: int = 10000, chunk_overlap: int = 200):
@@ -161,7 +156,6 @@ def create_vector_store(docs: List[Document], embeddings, chunk_size: int = 1000
       chunk_overlap=chunk_overlap
   )
   splits = text_splitter.split_documents(docs)
-  # return Chroma.from_documents(splits, embeddings).as_retriever(search_kwargs={"k": 5}) 
   return FAISS.from_documents(splits, embeddings).as_retriever(search_kwargs={"k": 5})
 
 
@@ -179,37 +173,36 @@ PROMPT_TEMPLATE = """
 
 
 def get_qa_chain(source_dir):
-  """Create QA chain with proper error handling"""
+  """
+  Create QA chain with proper error handling
+  """
 
   try:
-    docs = load_documents(source_dir, extract_images=True)
-    if not docs:
-      raise ValueError("No documents found in the specified sources")
+      docs, image_paths = load_documents(source_dir, extract_images=True)
+      image_docs = images_to_documents(image_paths)
 
-    llm, embeddings = load_model()
-    # if not llm or not embeddings:model_type: str = "gemini",
-    #   raise ValueError(f"Model {model_type} not configured properly")
+      all_docs = docs + image_docs  
 
-    retriever = create_vector_store(docs, embeddings)
+      llm, embeddings = load_model()
+      retriever = create_vector_store(all_docs, embeddings)
 
-    prompt = PromptTemplate(
-        template=PROMPT_TEMPLATE,
-        input_variables=["context", "question"]
-    )
+      prompt = PromptTemplate(
+          template=PROMPT_TEMPLATE,
+          input_variables=["context", "question"]
+      )
 
-    response = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever,
-        return_source_documents=True,
-        chain_type_kwargs={"prompt": prompt}
-    )
+      response = RetrievalQA.from_chain_type(
+          llm=llm,
+          chain_type="stuff",
+          retriever=retriever,
+          return_source_documents=True,
+          chain_type_kwargs={"prompt": prompt}
+      )
 
-    return response
+      return response
 
   except Exception as e:
-    # print(f"Error initializing QA system: {e}")
-    return f"Error initializing QA system: {e}"
+      return f"Error initializing QA system: {e}"
 
 
 
@@ -226,7 +219,7 @@ def query_system(query: str, qa_chain):
     return f"Error processing query: {e}"
 
 
-# content_dir = "https://mail.laikipiaassembly.go.ke/assets/file/91bf7702-development-plans-maps.pdf"
+# content_dir = "agrof_health_paper.pdf"
 
 
 # qa_chain = get_qa_chain(
@@ -238,10 +231,10 @@ qa_chain = get_qa_chain("91bf7702-development-plans-maps_compressed.pdf")
 
 # query = "What are the most important impacts of tree-based interventions on health and wellbeing?"
 
-query = "can you analyze the plans in the Mithuri Centre Base Map alone, provide the status of the plan"
+query = "Can you analyze the technical drawings of the images and provide the status of the plan"
 print(query_system(query, qa_chain))
 
 
-# docs, imgs = load_documents("91bf7702-development-plans-maps_compressed.pdf", extract_images=True)
+docs, imgs = load_documents("91bf7702-development-plans-maps_compressed.pdf", extract_images=True)
 # print("Text Docs:", len(docs))
 # print("Images:", imgs)

@@ -8,11 +8,6 @@ load_dotenv()
 
 genai.configure(api_key = os.getenv("GOOGLE_API_KEY"))
 
-# def initialize_gemini(api_key: str):
-#     genai.configure(api_key=api_key)
-#     return genai.GenerativeModel(model_name="models/gemini-pro-vision")
-
-
 
 
 
@@ -35,7 +30,7 @@ def load_images_from_folder(folder_path: str, limit: int = 10):
 
 def get_image_details(image):
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-2.5-pro')
         
         prompt = f"""
 
@@ -69,6 +64,8 @@ def get_image_details(image):
 
             If the image does not clearly indicate these aspects, say so with reasoning.
 
+            Use OCR to extract text annotations, legends, and metadata in the image. Use your spatial reasoning to interpret color zones, line work, and layout hierarchy.
+
             """
         
         # Generate content with temperature set to 1.5
@@ -83,10 +80,4 @@ def get_image_details(image):
         return f"Error generating information: {str(e)}"
 
 
-if __name__ == "__main__":
-    image_folder = "pdf_images"
-    images = load_images_from_folder(image_folder)
 
-    for idx, image in enumerate(images):
-        print(f"\n--- Analyzing Image {idx + 1}/{len(images)} ---\n")
-        get_image_details(image)

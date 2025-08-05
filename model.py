@@ -219,22 +219,5 @@ def query_system(query: str, qa_chain):
     return f"Error processing query: {e}"
 
 
-# content_dir = "agrof_health_paper.pdf"
 
 
-# qa_chain = get_qa_chain(
-#     source_dir=content_dir
-# )
-
-qa_chain = get_qa_chain("91bf7702-development-plans-maps_compressed.pdf")
-
-
-# query = "What are the most important impacts of tree-based interventions on health and wellbeing?"
-
-query = "Can you analyze the technical drawings of the images and provide the status of the plan"
-print(query_system(query, qa_chain))
-
-
-docs, imgs = load_documents("91bf7702-development-plans-maps_compressed.pdf", extract_images=True)
-# print("Text Docs:", len(docs))
-# print("Images:", imgs)

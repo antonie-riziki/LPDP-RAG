@@ -1,0 +1,13 @@
+
+python-dotenv
+openai
+requests
+google-generativeai
+langchain
+langchain-community
+langchain-core
+langchain-google-genai
+google-generativeai
+chromadb
+faiss-cpu
+pypdf

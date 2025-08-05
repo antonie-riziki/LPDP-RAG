@@ -58,17 +58,8 @@ def extract_images_from_pdf(pdf_path: str, image_output_dir: str):
     Extracts embedded images and page previews from a PDF.
     Saves them in the image_output_dir and returns a list of paths.
     """
-    os.makedirs(image_output_dir, exist_ok=True)
-    image_paths = []
 
-    # 1. Page-level screenshots (for plan pages)
-    # pages = convert_from_path(pdf_path, 300)
-    # for i, page in enumerate(pages):
-    #     path = os.path.join(image_output_dir, f"{os.path.basename(pdf_path).replace('.pdf','')}_page_{i}.png")
-    #     page.save(path, "PNG")
-    #     image_paths.append(path)
-
-    # 2. Embedded images (if any)
+    # Embedded images (if any)
     os.makedirs(image_output_dir, exist_ok=True)
     image_paths = []
     doc = fitz.open(pdf_path)
@@ -242,15 +233,15 @@ def query_system(query: str, qa_chain):
 #     source_dir=content_dir
 # )
 
-# qa_chain = get_qa_chain("91bf7702-development-plans-maps_compressed.pdf")
+qa_chain = get_qa_chain("91bf7702-development-plans-maps_compressed.pdf")
 
 
 # query = "What are the most important impacts of tree-based interventions on health and wellbeing?"
 
-# query = "can you analyze the plans in the Mithuri Centre Base Map alone, provide the status of the plan"
-# print(query_system(query, qa_chain))
+query = "can you analyze the plans in the Mithuri Centre Base Map alone, provide the status of the plan"
+print(query_system(query, qa_chain))
 
 
-docs, imgs = load_documents("91bf7702-development-plans-maps_compressed.pdf", extract_images=True)
-print("Text Docs:", len(docs))
-print("Images:", imgs)
+# docs, imgs = load_documents("91bf7702-development-plans-maps_compressed.pdf", extract_images=True)
+# print("Text Docs:", len(docs))
+# print("Images:", imgs)

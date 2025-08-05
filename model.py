@@ -1,8 +1,11 @@
 import os
 import sys
+import io
 import glob
+import fitz 
 import getpass
 import warnings
+from PIL import Image
 from typing import List, Union
 from dotenv import load_dotenv
 from langchain_community.document_loaders import (
@@ -15,10 +18,12 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_community.vectorstores import FAISS
 from langchain.docstore.document import Document
+from pdf2image import convert_from_path
+
 warnings.filterwarnings("ignore")
 
 sys.path.insert(1, './src')
-print(sys.path.insert(1, '../src/'))
+# print(sys.path.insert(1, '../src/'))
 
 load_dotenv()
 
@@ -46,29 +51,114 @@ def load_model():
   )
   return model, embeddings
 
+# =====================================================================
 
-def load_documents(source_dir: str):
+def extract_images_from_pdf(pdf_path: str, image_output_dir: str):
     """
-    Load documents from multiple sources
+    Extracts embedded images and page previews from a PDF.
+    Saves them in the image_output_dir and returns a list of paths.
+    """
+    os.makedirs(image_output_dir, exist_ok=True)
+    image_paths = []
+
+    # 1. Page-level screenshots (for plan pages)
+    # pages = convert_from_path(pdf_path, 300)
+    # for i, page in enumerate(pages):
+    #     path = os.path.join(image_output_dir, f"{os.path.basename(pdf_path).replace('.pdf','')}_page_{i}.png")
+    #     page.save(path, "PNG")
+    #     image_paths.append(path)
+
+    # 2. Embedded images (if any)
+    os.makedirs(image_output_dir, exist_ok=True)
+    image_paths = []
+    doc = fitz.open(pdf_path)
+
+    keywords = ['zoning', 'plan', 'layout', 'structure', 'development', 'site']
+
+    for page_index in range(len(doc)):
+        page_text = doc[page_index].get_text().lower()
+        if not any(word in page_text for word in keywords):
+            continue  # skip these pages
+
+        for img_index, img in enumerate(doc.get_page_images(page_index)):
+            xref = img[0]
+            base_image = doc.extract_image(xref)
+            image_bytes = base_image["image"]
+            ext = base_image["ext"]
+
+            # Check size using PIL
+            image = Image.open(io.BytesIO(image_bytes))
+            if image.width < 500 or image.height < 500:
+                continue  # Skip small images
+
+            aspect_ratio = image.width / image.height
+            if aspect_ratio < 0.5 or aspect_ratio > 2.0:
+                continue  # Skip weirdly shaped images
+
+            image_path = os.path.join(
+                image_output_dir, f"{os.path.basename(pdf_path).replace('.pdf','')}_filtered_{page_index}_{img_index}.{ext}"
+            )
+            image.save(image_path)
+            image_paths.append(image_path)
+
+    return image_paths
+
+
+def load_documents(source_dir: str, extract_images: bool = True, image_output_dir: str = "pdf_images"):
+    """
+    Load documents from multiple sources including image extraction from PDFs
     """
     documents = []
+    images = []
 
     file_types = {
-      "*.pdf": PyPDFLoader,
-      "*.csv": CSVLoader
+        "*.pdf": PyPDFLoader,
+        "*.csv": CSVLoader
     }
 
     if os.path.isfile(source_dir):
         ext = os.path.splitext(source_dir)[1].lower()
         if ext == ".pdf":
             documents.extend(PyPDFLoader(source_dir).load())
+            if extract_images:
+                images.extend(extract_images_from_pdf(source_dir, image_output_dir))
         elif ext == ".csv":
             documents.extend(CSVLoader(source_dir).load())
     else:
         for pattern, loader in file_types.items():
             for file_path in glob.glob(os.path.join(source_dir, pattern)):
                 documents.extend(loader(file_path).load())
-    return documents
+                if pattern == "*.pdf" and extract_images:
+                    images.extend(extract_images_from_pdf(file_path, image_output_dir))
+
+    return documents, images
+
+# =====================================================================
+
+
+
+# def load_documents(source_dir: str):
+#     """
+#     Load documents from multiple sources
+#     """
+#     documents = []
+
+#     file_types = {
+#       "*.pdf": PyPDFLoader,
+#       "*.csv": CSVLoader
+#     }
+
+#     if os.path.isfile(source_dir):
+#         ext = os.path.splitext(source_dir)[1].lower()
+#         if ext == ".pdf":
+#             documents.extend(PyPDFLoader(source_dir).load())
+#         elif ext == ".csv":
+#             documents.extend(CSVLoader(source_dir).load())
+#     else:
+#         for pattern, loader in file_types.items():
+#             for file_path in glob.glob(os.path.join(source_dir, pattern)):
+#                 documents.extend(loader(file_path).load())
+#     return documents
 
 
 def create_vector_store(docs: List[Document], embeddings, chunk_size: int = 10000, chunk_overlap: int = 200):
@@ -101,7 +191,7 @@ def get_qa_chain(source_dir):
   """Create QA chain with proper error handling"""
 
   try:
-    docs = load_documents(source_dir)
+    docs = load_documents(source_dir, extract_images=True)
     if not docs:
       raise ValueError("No documents found in the specified sources")
 
@@ -127,7 +217,7 @@ def get_qa_chain(source_dir):
     return response
 
   except Exception as e:
-    print(f"Error initializing QA system: {e}")
+    # print(f"Error initializing QA system: {e}")
     return f"Error initializing QA system: {e}"
 
 
@@ -152,10 +242,15 @@ def query_system(query: str, qa_chain):
 #     source_dir=content_dir
 # )
 
-qa_chain = get_qa_chain("https://mail.laikipiaassembly.go.ke/assets/file/91bf7702-development-plans-maps.pdf")
+# qa_chain = get_qa_chain("91bf7702-development-plans-maps_compressed.pdf")
 
 
 # query = "What are the most important impacts of tree-based interventions on health and wellbeing?"
 
-query = "what is the document about, briefly summarize the contents"
-print(query_system(query, qa_chain))
+# query = "can you analyze the plans in the Mithuri Centre Base Map alone, provide the status of the plan"
+# print(query_system(query, qa_chain))
+
+
+docs, imgs = load_documents("91bf7702-development-plans-maps_compressed.pdf", extract_images=True)
+print("Text Docs:", len(docs))
+print("Images:", imgs)

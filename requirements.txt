@@ -11,3 +11,6 @@ google-generativeai
 chromadb
 faiss-cpu
 pypdf
+pil
+PyMuPDF
+pdf2image

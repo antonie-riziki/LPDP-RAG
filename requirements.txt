@@ -14,3 +14,6 @@ pypdf
 PyMuPDF
 pdf2image
 pytesseract
+fastapi 
+uvicorn 
+python-multipart

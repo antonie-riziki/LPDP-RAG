@@ -1,7 +1,11 @@
 
+
 import os
 import google.generativeai as genai
+
 from PIL import Image
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import JSONResponse
 from typing import BinaryIO
 
 from dotenv import load_dotenv
@@ -9,6 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 genai.configure(api_key = os.getenv("GOOGLE_API_KEY"))
+
+app = FastAPI()
 
 
 def load_image_file(file_obj: BinaryIO):
@@ -74,7 +80,18 @@ def get_image_details(image):
 
 
 
-if __name__=='__main__':
-    with open("91bf7702-development-plans-maps_compressed_filtered_15_0.jpeg", "rb") as f:
-        image_input = load_image_file(f)
-        get_image_details(image_input)
+# if __name__=='__main__':
+#     with open("91bf7702-development-plans-maps_compressed_filtered_19_1.jpeg", "rb") as f:
+#         image_input = load_image_file(f)
+#         get_image_details(image_input)
+
+
+
+@app.post("/analyze-lpdp/")
+async def analyze_lpdp(file: UploadFile = File(...)):
+    try:
+        image = load_image_file(file.file)
+        result = get_image_details(image)
+        return JSONResponse(content={"analysis": result})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
